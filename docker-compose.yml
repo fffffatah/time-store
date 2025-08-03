@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  timestore-node1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: timestore-node1
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - Raft__NodeId=node1
+      - Raft__Peers=http://timestore-node2:5236,http://timestore-node3:5236
+      - Database__Path=/app/data/timestore_node1.db
+      - ASPNETCORE_URLS=http://+:5236
+    ports:
+      - "5001:5236"
+    volumes:
+      - timestore-data-node1:/app/data
+    networks:
+      - timestore-network
+    restart: unless-stopped
+
+  timestore-node2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: timestore-node2
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - Raft__NodeId=node2
+      - Raft__Peers=http://timestore-node1:5236,http://timestore-node3:5236
+      - Database__Path=/app/data/timestore_node2.db
+      - ASPNETCORE_URLS=http://+:5236
+    ports:
+      - "5002:5236"
+    volumes:
+      - timestore-data-node2:/app/data
+    networks:
+      - timestore-network
+    restart: unless-stopped
+
+  timestore-node3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: timestore-node3
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - Raft__NodeId=node3
+      - Raft__Peers=http://timestore-node1:5236,http://timestore-node2:5236
+      - Database__Path=/app/data/timestore_node3.db
+      - ASPNETCORE_URLS=http://+:5236
+    ports:
+      - "5003:5236"
+    volumes:
+      - timestore-data-node3:/app/data
+    networks:
+      - timestore-network
+    restart: unless-stopped
+
+networks:
+  timestore-network:
+    driver: bridge
+
+volumes:
+  timestore-data-node1:
+  timestore-data-node2:
+  timestore-data-node3:
