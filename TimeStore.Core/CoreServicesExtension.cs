@@ -33,7 +33,13 @@ public static class CoreServicesExtension
         });
         
         // Configure and register the HTTP client for node communication
-        services.AddHttpClient();
+        services.AddHttpClient("RaftClient", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(5); // Set reasonable timeout
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (_, _, _, _) => true, // For dev environment
+        });
         
         // Register the Raft service as a singleton
         services.AddSingleton<IRaftService>(sp => 
@@ -46,7 +52,7 @@ public static class CoreServicesExtension
                 nodeId,
                 peerNodes,
                 persistence,
-                httpClientFactory.CreateClient(),
+                httpClientFactory.CreateClient("RaftClient"),
                 logger);
         });
         
