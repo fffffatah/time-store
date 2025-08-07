@@ -32,12 +32,17 @@ public class TimeSeriesController(IRaftService raftService)
     {
         var result = await raftService.AddTimeSeriesDataAsync(data);
 
-        if (result is not { success: true, leaderId: not null })
+        if (result.success)
+        {
+            return Ok(data);
+        }
+
+        if (result.leaderId == null)
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable, "No leader available");
         }
-
-        return Ok(data);
+        
+        return StatusCode(StatusCodes.Status307TemporaryRedirect, new { LeaderId = result.leaderId });
 
     }
 
