@@ -1,4 +1,4 @@
-namespace TimeStore.Core.Database;
+namespace TimeStore.Core.Database.Entities;
 
 /// <summary>
 /// Represents a data record in the TimeStore database.

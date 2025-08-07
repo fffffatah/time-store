@@ -1,4 +1,4 @@
-using TimeStore.Core.Database;
+using TimeStore.Core.Database.Entities;
 
 namespace TimeStore.Core.Raft;
 
@@ -23,12 +23,12 @@ public interface IRaftService
     string? LeaderId { get; }
     
     /// <summary>
-    /// Handles a RequestVote RPC call from a candidate.
+    /// Handles a RequestVote call from a candidate.
     /// </summary>
     Task<RequestVoteResponse> HandleRequestVoteAsync(RequestVoteRequest request);
     
     /// <summary>
-    /// Handles an AppendEntries RPC from the leader.
+    /// Handles an AppendEntries call from the leader.
     /// </summary>
     Task<AppendEntriesResponse> HandleAppendEntriesAsync(AppendEntriesRequest request);
     

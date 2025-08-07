@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using TimeStore.Core.Database;
+using TimeStore.Core.Database.Entities;
 using TimeStore.Core.Raft;
 
 namespace TimeStore.Controllers;
@@ -9,25 +9,17 @@ namespace TimeStore.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-public class TimeSeriesController : ControllerBase
+public class TimeSeriesController(IRaftService raftService)
+    : ControllerBase
 {
-    private readonly IRaftService _raftService;
-    private readonly ILogger<TimeSeriesController> _logger;
-
-    public TimeSeriesController(IRaftService raftService, ILogger<TimeSeriesController> logger)
-    {
-        _raftService = raftService;
-        _logger = logger;
-    }
-
     /// <summary>
     /// Gets all time-series data points.
     /// </summary>
     [HttpGet]
     public ActionResult<IEnumerable<Data>> GetAll()
     {
-        _logger.LogInformation("Getting all time-series data");
-        var data = _raftService.GetTimeSeriesData();
+        var data = raftService.GetTimeSeriesData();
+        
         return Ok(data);
     }
 
@@ -38,23 +30,15 @@ public class TimeSeriesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Data>> Add([FromBody] Data data)
     {
-        _logger.LogInformation("Adding new time-series data point for device {DeviceId}", data.DeviceId);
-        
-        var result = await _raftService.AddTimeSeriesDataAsync(data);
-        
-        if (result.success)
-        {
-            return Ok(data);
-        }
-        else if (result.leaderId != null)
-        {
-            // Return a redirect to the leader
-            return StatusCode(StatusCodes.Status307TemporaryRedirect, new { LeaderId = result.leaderId });
-        }
-        else
+        var result = await raftService.AddTimeSeriesDataAsync(data);
+
+        if (result is not { success: true, leaderId: not null })
         {
             return StatusCode(StatusCodes.Status503ServiceUnavailable, "No leader available");
         }
+
+        return Ok(data);
+
     }
 
     /// <summary>
@@ -63,8 +47,7 @@ public class TimeSeriesController : ControllerBase
     [HttpGet("device/{deviceId}")]
     public ActionResult<IEnumerable<Data>> GetByDevice(string deviceId)
     {
-        _logger.LogInformation("Getting time-series data for device {DeviceId}", deviceId);
-        var data = _raftService.GetTimeSeriesData()
+        var data = raftService.GetTimeSeriesData()
             .Where(d => d.DeviceId == deviceId)
             .ToList();
         

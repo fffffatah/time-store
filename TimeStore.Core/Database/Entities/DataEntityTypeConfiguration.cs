@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace TimeStore.Core.Database;
+namespace TimeStore.Core.Database.Entities;
 
 /// <summary>
 /// Entity type configuration for the Data entity.

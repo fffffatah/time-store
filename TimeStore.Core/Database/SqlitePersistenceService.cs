@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using TimeStore.Core.Database.Entities;
 using TimeStore.Core.Raft;
 
 namespace TimeStore.Core.Database;
@@ -13,6 +14,12 @@ public class SqlitePersistenceService
     private readonly ILogger<SqlitePersistenceService> _logger;
     private readonly string _nodeId;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SqlitePersistenceService"/> class.
+    /// </summary>
+    /// <param name="dbContextFactory"> Factory for creating database contexts.</param>
+    /// <param name="logger"> Logger for logging messages.</param>
+    /// <param name="nodeId"> The unique identifier for this Raft node.</param>
     public SqlitePersistenceService(
         IDbContextFactory<SqliteContext> dbContextFactory, 
         ILogger<SqlitePersistenceService> logger,
@@ -22,41 +29,7 @@ public class SqlitePersistenceService
         _logger = logger;
         _nodeId = nodeId;
         
-        // Ensure Raft tables exist
-        EnsureRaftTablesExist();
-    }
-
-    private void EnsureRaftTablesExist()
-    {
-        using var context = _dbContextFactory.CreateDbContext();
-        
-        // Execute raw SQL to create Raft tables if they don't exist
-        context.Database.ExecuteSqlRaw(@"
-            CREATE TABLE IF NOT EXISTS RaftState (
-                NodeId TEXT PRIMARY KEY,
-                CurrentTerm INTEGER NOT NULL,
-                VotedFor TEXT NULL
-            );
-            
-            CREATE TABLE IF NOT EXISTS RaftLog (
-                Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                Term INTEGER NOT NULL,
-                Command TEXT NOT NULL,
-                Applied INTEGER NOT NULL DEFAULT 0
-            );
-        ");
-        
-        // Initialize RaftState for this node if it doesn't exist
-        var stateExists = context.Database
-            .SqlQueryRaw<RaftStateRecord>("SELECT * FROM RaftState")
-            .Count(state => state.NodeId == _nodeId) > 0;
-        
-        if (!stateExists)
-        {
-            context.Database.ExecuteSqlRaw(
-                "INSERT INTO RaftState (NodeId, CurrentTerm, VotedFor) VALUES ({0}, 0, NULL)",
-                _nodeId);
-        }
+        EnsureRaftStateInitialized();
     }
 
     /// <summary>
@@ -65,16 +38,17 @@ public class SqlitePersistenceService
     public (long CurrentTerm, string? VotedFor) GetRaftState()
     {
         using var context = _dbContextFactory.CreateDbContext();
-        var result = context.Database.SqlQueryRaw<RaftStateRecord>("SELECT * FROM RaftState")
-            .FirstOrDefault(state => state.NodeId == _nodeId);
-        
-        if (result == null)
+        var state = context.RaftStates
+            .FirstOrDefault(s => s.NodeId == _nodeId);
+
+        if (state != null)
         {
-            _logger.LogWarning("Raft state not found for node {NodeId}. Initializing with default values.", _nodeId);
-            return (0, null);
+            return (state.CurrentTerm, state.VotedFor);
         }
+
+        _logger.LogWarning("Raft state not found for node {NodeId}. Initializing with default values.", _nodeId);
         
-        return (result.CurrentTerm, result.VotedFor);
+        return (0, null);
     }
 
     /// <summary>
@@ -83,9 +57,27 @@ public class SqlitePersistenceService
     public async Task UpdateRaftState(long currentTerm, string? votedFor)
     {
         using var context = _dbContextFactory.CreateDbContext();
-        await context.Database.ExecuteSqlRawAsync(
-            "UPDATE RaftState SET CurrentTerm = {0}, VotedFor = {1} WHERE NodeId = {2}",
-            currentTerm, votedFor, _nodeId);
+        var state = await context.RaftStates
+            .FirstOrDefaultAsync(s => s.NodeId == _nodeId);
+        
+        if (state == null)
+        {
+            state = new RaftStateEntity
+            {
+                NodeId = _nodeId,
+                CurrentTerm = currentTerm,
+                VotedFor = votedFor
+            };
+            context.RaftStates.Add(state);
+        }
+        else
+        {
+            state.CurrentTerm = currentTerm;
+            state.VotedFor = votedFor;
+            context.RaftStates.Update(state);
+        }
+        
+        await context.SaveChangesAsync();
     }
 
     /// <summary>
@@ -94,10 +86,11 @@ public class SqlitePersistenceService
     public List<RaftLogEntry> GetLogEntries()
     {
         using var context = _dbContextFactory.CreateDbContext();
-        var records = context.Database.SqlQueryRaw<RaftLogRecord>("SELECT * FROM RaftLog ORDER BY Id")
+        var logs = context.RaftLogs
+            .OrderBy(l => l.Id)
             .ToList();
         
-        return records.Select(r => new RaftLogEntry(r.Term, r.Command)).ToList();
+        return logs.Select(log => new RaftLogEntry(log.Term, log.Command)).ToList();
     }
 
     /// <summary>
@@ -106,12 +99,12 @@ public class SqlitePersistenceService
     public RaftLogEntry GetLastLogEntry()
     {
         using var context = _dbContextFactory.CreateDbContext();
-        var record = context.Database
-            .SqlQueryRaw<RaftLogRecord>($"SELECT * FROM RaftLog ORDER BY Id DESC LIMIT 1")
+        var lastLog = context.RaftLogs
+            .OrderByDescending(l => l.Id)
             .FirstOrDefault();
         
-        return record != null
-            ? new RaftLogEntry(record.Term, record.Command)
+        return lastLog != null
+            ? new RaftLogEntry(lastLog.Term, lastLog.Command)
             : new RaftLogEntry(0, "");
     }
 
@@ -121,9 +114,15 @@ public class SqlitePersistenceService
     public void AppendLogEntry(RaftLogEntry entry)
     {
         using var context = _dbContextFactory.CreateDbContext();
-        context.Database.ExecuteSqlRaw(
-            "INSERT INTO RaftLog (Term, Command, Applied) VALUES ({0}, {1}, 0)",
-            entry.Term, entry.Command);
+        var logEntity = new RaftLogEntity
+        {
+            Term = entry.Term,
+            Command = entry.Command,
+            Applied = false
+        };
+        
+        context.RaftLogs.Add(logEntity);
+        context.SaveChanges();
     }
 
     /// <summary>
@@ -132,7 +131,12 @@ public class SqlitePersistenceService
     public void DeleteLogsFromIndex(long index)
     {
         using var context = _dbContextFactory.CreateDbContext();
-        context.Database.ExecuteSqlRaw("DELETE FROM RaftLog WHERE Id >= {0}", index);
+        var logsToDelete = context.RaftLogs
+            .Where(l => l.Id >= index)
+            .ToList();
+        
+        context.RaftLogs.RemoveRange(logsToDelete);
+        context.SaveChanges();
     }
 
     /// <summary>
@@ -141,7 +145,16 @@ public class SqlitePersistenceService
     public void MarkLogApplied(long index)
     {
         using var context = _dbContextFactory.CreateDbContext();
-        context.Database.ExecuteSqlRaw("UPDATE RaftLog SET Applied = 1 WHERE Id = {0}", index);
+        var logEntry = context.RaftLogs.FirstOrDefault(l => l.Id == index);
+
+        if (logEntry == null)
+        {
+            return;
+        }
+        
+        logEntry.Applied = true;
+        context.RaftLogs.Update(logEntry);
+        context.SaveChanges();
     }
 
     /// <summary>
@@ -160,10 +173,34 @@ public class SqlitePersistenceService
     public List<Data> GetAllTimeSeriesData()
     {
         using var context = _dbContextFactory.CreateDbContext();
+        
         return context.Data.ToList();
     }
     
-    // Private record classes to help with SQL queries
-    private record RaftStateRecord(string NodeId, long CurrentTerm, string? VotedFor);
-    private record RaftLogRecord(long Id, long Term, string Command);
+    /// <summary>
+    /// Ensures that Raft state is initialized for this node.
+    /// </summary>
+    private void EnsureRaftStateInitialized()
+    {
+        using var context = _dbContextFactory.CreateDbContext();
+        
+        var stateExists = context.RaftStates.Any(s => s.NodeId == _nodeId);
+
+        if (stateExists)
+        {
+            return;
+        }
+        
+        var initialState = new RaftStateEntity
+        {
+            NodeId = _nodeId,
+            CurrentTerm = 0,
+            VotedFor = null
+        };
+            
+        context.RaftStates.Add(initialState);
+        context.SaveChanges();
+            
+        _logger.LogInformation("Initialized Raft state for node {NodeId}", _nodeId);
+    }
 }
