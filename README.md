@@ -166,3 +166,16 @@ Response:
   }
 ]
 ```
+
+## Limitations & Future Work
+
+**Schema**: To provide flexible schema for need based customizability, a column can be added to the _Data_ table to store a serialized JSON object.
+This will allow users to store any custom model alongside the actual time series entry.
+
+**Data Partitioning**: The time series data can be partitioned into multiple tables based on the device ID or timestamp (time bucketing based on hours).
+This will allow for better query performance when querying over a time range or for a specific device.
+
+Also, RaftService related tables (RaftLog and RaftState) can be moved to a separate SQLite file to avoid DB locks during write operations.
+
+**Flexible Query**: The current implementation only supports querying by device ID and fetching all time entries. Future work can include adding support for querying by time range, value range, and other custom queries.
+Additionally, auto background aggregation mechanism can be added to aggregate data across specific time spans.
