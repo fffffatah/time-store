@@ -179,3 +179,7 @@ Also, RaftService related tables (RaftLog and RaftState) can be moved to a separ
 
 **Flexible Query**: The current implementation only supports querying by device ID and fetching all time entries. Future work can include adding support for querying by time range, value range, and other custom queries.
 Additionally, auto background aggregation mechanism can be added to aggregate data across specific time spans.
+
+
+**.NET Specific Optimizations**: Currently, the project uses full fledged controllers to provide REST endpoints, which could introduce extra overhead.
+To tackle this, .NET minimal APIs could be introduced. Furthermore, to enable AoT compilation (native binary), EFCore can be removed and raw DB operations could be introduced as EFCore relies heavily on reflection. Using AoT compilation would result in significant reduction of memory usage.
