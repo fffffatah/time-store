@@ -183,3 +183,5 @@ Additionally, auto background aggregation mechanism can be added to aggregate da
 
 **.NET Specific Optimizations**: Currently, the project uses full fledged controllers to provide REST endpoints, which could introduce extra overhead.
 To tackle this, .NET minimal APIs could be introduced. Furthermore, to enable AoT compilation (native binary), EFCore can be removed and raw DB operations could be introduced as EFCore relies heavily on reflection. Using AoT compilation would result in significant reduction of memory usage.
+
+**Security**: Auth has been left out intentionally for this iteration to reduce scope.
