@@ -1,7 +1,7 @@
 # Time Store DB
 
 A simple distributed database with SQLite backend for storing and retrieving time entries. This project incorporates Raft consensus algorithm for handling leader election and log replication.
-Currently, it only supports a rigid schema for time entries and doesn't provide any customizability.
+Currently, it only supports a rigid schema for time entries and doesn't provide any customizability. This project was built for partial completion of CSE707 at BRAC University.
 
 ```json
 {
