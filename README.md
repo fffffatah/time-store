@@ -182,6 +182,8 @@ Additionally, auto background aggregation mechanism can be added to aggregate da
 
 
 **.NET Specific Optimizations**: Currently, the project uses full fledged controllers to provide REST endpoints, which could introduce extra overhead.
-To tackle this, .NET minimal APIs could be introduced. Furthermore, to enable AoT compilation (native binary), EFCore can be removed and raw DB operations could be introduced as EFCore relies heavily on reflection. Using AoT compilation would result in significant reduction of memory usage.
+To tackle this, .NET minimal APIs could be introduced. Furthermore, to enable AoT compilation (native binary), EFCore can be removed and raw DB operations could be introduced as EFCore relies heavily on reflection. Using AoT compilation would result in significant reduction of memory usage. In addition, retry mechanism for failed write attempts can be added using the [Polly](https://github.com/App-vNext/Polly) library.
 
-**Security**: Auth has been left out intentionally for this iteration to reduce scope.
+**Raft Specific Optimizations**: The Raft Algorithm written in this project is not properly optimized. The current implementation does not have any mechanism for log compaction, and without log compaction, the RaftLog table will grow indefinitely, eventually causing storage and performance issues. Also, methods such as LoadPersistedState() that performs only read operations can be made asynchronus.
+
+**Security**: Authentication has been intentionally left out for this iteration to reduce scope. Using ’API Key’ could be the initial form of authentication.
